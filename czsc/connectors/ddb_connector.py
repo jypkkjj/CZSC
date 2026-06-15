@@ -58,7 +58,8 @@ DDB_MIN5_TBL = "min5"
 FREQ_DDB_TBL = {
     Freq.F1:  (DDB_MIN_DB, DDB_MIN1_TBL),
     Freq.F5:  (DDB_MIN_DB, DDB_MIN5_TBL),
-    Freq.F30: (DDB_MIN_DB, DDB_MIN5_TBL),  # 服务端没 min30；30min 走客户端重采样 5min
+    Freq.F15: (DDB_MIN_DB, DDB_MIN5_TBL),  # 服务端没 min15；15min 走客户端重采样 5min
+    Freq.F30: (DDB_MIN_DB, DDB_MIN5_TBL),  # 同上；30min 走客户端重采样 5min
     Freq.F60: (DDB_MIN_DB, DDB_MIN5_TBL),  # 同上；60min 走客户端重采样 5min
     Freq.D:   (DDB_DAY_DB, DDB_DAY_TBL),
 }
@@ -67,6 +68,7 @@ FREQ_DDB_TBL = {
 TIME_COL = {
     Freq.F1:  "trade_time",
     Freq.F5:  "trade_time",
+    Freq.F15: "trade_time",
     Freq.F30: "trade_time",
     Freq.F60: "trade_time",
     Freq.D:   "time",
@@ -275,8 +277,8 @@ def get_raw_bars(
     if df.empty:
         return []
 
-    # F30/F60 客户端重采样（服务端只有 min5 表，30/60min 没有），从 min5 base 重采样
-    if freq in (Freq.F30, Freq.F60):
+    # F15 / F30 / F60 客户端重采样（服务端只有 min1 / min5 表）
+    if freq in (Freq.F15, Freq.F30, Freq.F60):
         # czsc.resample_bars 期望 df 含 dt + symbol 列。ddb min 表的列名是 code/trade_time。
         # 同时把 symbol 重写为聚宽格式，保持与日线 / 分钟 native 输出（_format_ddb_kline 一致）。
         df2 = df.rename(columns={"trade_time": "dt"})

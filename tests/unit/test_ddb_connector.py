@@ -212,23 +212,33 @@ class TestDdbConnector:
         # 半闭区间使用 < 而不是 <=（避免 edt 当日重复）
         assert "<" in sql
 
-    def test_6x4_f30_f60_resample_from_5min(self, patched_pool):
-        """§6.4 F30 / F60 没有服务端表，走客户端重采样。
+    def test_6x4_client_resample_from_5min_f15_f30_f60(self, patched_pool):
+        """§6.4 F15 / F30 / F60 服务端都没有表，走客户端重采样 5min。
 
-        验证：调用 Freq.F30 时，调用 sql 返回的是 min5 表（"dfs://xc/tushare/min" + "min5"），
-              然后再调用 ``czsc.resample_bars`` 客户端重采样。
+        验证：调用 Freq.F15 / F30 / F60 任一时，最终都调用 ``czsc.resample_bars``，
+              raw_bars=True、base_freq="5分钟"。
         """
         calls, _ = patched_pool
-        # 拦截 czsc.resample_bars，确认被调用
-        with patch.object(czsc, "resample_bars",
-                          wraps=czsc.resample_bars) as mock_resample:
-            bars_30 = ddb.get_raw_bars("000001.XSHE", Freq.F30, "20250102", "20250108")
-            assert mock_resample.called, "F30 必须经 resample_bars 客户端重采样"
-            args, kwargs = mock_resample.call_args
-            # raw_bars=True, target_freq=F30, base_freq="5分钟"
-            assert kwargs.get("raw_bars") is True or (len(args) >= 3 and args[2] is True)
-            # F30 输出应至少有一根
-            assert bars_30 and len(bars_30) > 0
+        for freq in (Freq.F15, Freq.F30, Freq.F60):
+            with patch.object(czsc, "resample_bars",
+                              wraps=czsc.resample_bars) as mock_resample:
+                bars = ddb.get_raw_bars("000001.XSHE", freq, "20250102", "20250102")
+                assert mock_resample.called, f"{freq.name} 必须经 resample_bars 客户端重采样"
+                args, kwargs = mock_resample.call_args
+                # raw_bars=True, target_freq=freq, base_freq="5分钟"
+                assert kwargs.get("raw_bars") is True or (len(args) >= 3 and args[2] is True)
+                assert kwargs.get("base_freq") == "5分钟" or (
+                    len(args) >= 4 and args[3] == "5分钟"
+                )
+                # 至少有一根 bar 出来
+                assert bars and len(bars) > 0
+                # 全部以聚宽格式记录 symbol
+                assert all(b.symbol == "000001.XSHE" for b in bars)
+                # 全部 freq 字段都正确反映用户传入的目标 freq
+                assert all(b.freq == freq for b in bars)
+            # SQL 也走的是 min5（"dfs://xc/tushare/min" + "min5"）
+            assert any("min5" in c and "dfs://xc/tushare/min" in c for c in calls), \
+                f"{freq.name} 应当查询 ddb min5 表"
 
     def test_6x5_keep_original_unit(self, patched_pool):
         """§6.5 vol/amount 单位保持原始。
@@ -261,15 +271,23 @@ class TestDdbConnector:
 
     def test_user_can_pass_freq_enum_or_string(self, patched_pool):
         """get_raw_bars 应当接受 czsc.Freq 或者 "30分钟" 字符串两种形态。"""
+        # Freq.F15（新增：客户端重采样 5min）
+        bars_f15 = ddb.get_raw_bars("000001.XSHE", Freq.F15, "20250102", "20250102")
         # Freq.F30
         bars1 = ddb.get_raw_bars("000001.XSHE", Freq.F30, "20250102", "20250102")
         # 字符串 "5分钟"
         bars2 = ddb.get_raw_bars("000001.XSHE", "5分钟", "20250102", "20250102")
-        assert all(b.symbol == "000001.XSHE" for b in bars1)
-        assert all(b.symbol == "000001.XSHE" for b in bars2)
+        # 字符串 "15分钟"（新增：字符串态也支持重采样路径）
+        bars3 = ddb.get_raw_bars("000001.XSHE", "15分钟", "20250102", "20250102")
+        # Symbol 一致
+        for bars in (bars_f15, bars1, bars2, bars3):
+            assert all(b.symbol == "000001.XSHE" for b in bars), \
+                f"symbol 没保持聚宽格式：{[b.symbol for b in bars[:3]]}"
         # Freq 一致
+        assert all(b.freq == Freq.F15 for b in bars_f15)
         assert all(b.freq == Freq.F30 for b in bars1)
         assert all(b.freq == Freq.F5 for b in bars2)
+        assert all(b.freq == Freq.F15 for b in bars3)
 
     def test_format_converter_roundtrip(self):
         """格式转换器互逆性 / 边缘 case。"""
