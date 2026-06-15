@@ -429,6 +429,42 @@ print('first 3:', match[:3])
 
 如果 `match` 是 0，**马上换 Python 解版器**，别折腾 compiler。
 
+### 7.8 DolphinDB connector 接入指引
+
+如果要把内网 `ddbq` 实例里的日线 / 分钟级 K 线作为新数据源，跑下面 4 步就能接通：
+
+```bash
+# 1) 装依赖（czsc 默认依赖已经包含 dolphindb，只需 sync 一次）
+uv sync --python 3.13
+
+# 2) 在 pyproject.toml 里覆盖 DDB 凭据 / 地址（也可 export 环境变量）
+#    默认值：host=192.168.50.12, port=8848, user=admin, password=123456
+export DDB_HOST=192.168.50.12
+export DDB_PORT=8848
+export DDB_USER=admin
+export DDB_PASSWORD=123456
+
+# 3) 验证服务器可达性
+.venv/bin/python -c "
+import dolphindb as ddb
+s = ddb.session()
+s.connect('192.168.50.12', 8848, 'admin', '123456', readTimeout=15, writeTimeout=15)
+df = s.run('select top 2 * from loadTable(\"dfs://day_level_joinquant\", \"get_price\")')
+print(df.head().to_string())
+"
+
+# 4) 跑 connector 自带的 unit test（不依赖真实 server，mock session）
+uv run --no-sync pytest tests/unit/test_ddb_connector.py -v
+# 期望：9 passed in ~1s
+```
+
+⚠️ 与本项目其它 connector 不同的两件事（初踩优先阅读）：
+
+1. **日线和分钟线 code 格式不一致**——日线存聚宽 `"000001.XSHE"`，分钟级存 Tushare `"SZ000001"`。`ddb_connector` 内部 `to_tushare_code` / `from_tushare_code` 自动转换；调用方**只接受聚宽格式输入**，输出 `RawBar.symbol` 也是聚宽。
+2. **DolphinDB SQL 日期字面量必须 `YYYY.MM.DD` 而不是 `YYYYMMDD`**——直接 `where time >= 20250101` 服务端会拒。`ddb_connector._to_iso()` 内部已统一。
+
+完整 8 节踩坑与单元测试覆盖见 [docs/connectors.md §6](connectors.md) 与 [tests/unit/test_ddb_connector.py](../tests/unit/test_ddb_connector.py)。
+
 ---
 
 ## 8. 一行命令总结
