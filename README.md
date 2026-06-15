@@ -282,6 +282,8 @@ uv run ruff format czsc/ tests/
 uv run ruff check czsc/ tests/
 ```
 
+完整教程（含工具链安装、踩坑 FAQ、wheel 构建、多平台发布等）：[docs/source-build.md](docs/source-build.md)。
+
 
 ## 关键环境变量
 

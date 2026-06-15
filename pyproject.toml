@@ -69,6 +69,8 @@ dependencies = [
     "dill",
     "tenacity",
     "typer>=0.12.0",
+    # DolphinDB 连接器（czsc.connectors.ddb_connector 通过 dolphindb 协议访问内网 ddbq 实例）
+    "dolphindb>=1.0.1",
 ]
 
 [project.scripts]
