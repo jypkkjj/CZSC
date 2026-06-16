@@ -3,6 +3,14 @@
 > 本篇是 [Python ↔ Rust 数据流转机制详解](./python-rust-bridge.md) 系列的第五篇 · 实战篇。
 > 设计目标:**你按本教程,15 分钟内能成功加一个新的 K 线信号函数 `my_atr_band_V250101`,让它通过 `czsc.signals.list` 出现、能被 `czsc.CzscSignals` 调用、能在测试里跑通。**
 
+> 📘 姊妹篇(前行知识,推荐先简单扫一眼):
+> - 🚪 [总览:Python ↔ Rust 数据流转机制详解](./python-rust-bridge.md)
+> - 🌱 [proc-macro 注册机制(SIGNAL_REGISTRY)](./python-rust-bridge-deepdive.md) —— **必读**:本文档的第 2-3 节是它的应用层
+> - 🚄 [零拷贝优化(Arrow IPC → Polars)](./python-rust-bridge-zerocopy.md) —— 测试 DataFrame 怎么走出 IPC 路径
+> - 🧵 [GIL 与多线程踩坑实录](./python-rust-bridge-gil.md) —— Rust 单线程 vs rayon 的取与舍
+>
+> 📜 索引速查表: [姊妹篇总索引](./python-rust-bridge.md#姊妹篇索引)
+
 ---
 
 ## 目录
