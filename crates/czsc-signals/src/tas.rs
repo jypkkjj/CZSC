@@ -2316,6 +2316,98 @@ pub fn tas_atr_v230630(czsc: &CZSC, params: &ParamView, cache: &mut TaCache) -> 
     make_kline_signal_v1(&k1, &k2, k3, &v1)
 }
 
+/// my_atr_band_V250101: ATR 波动 z-score 分层信号（教学示例）
+///
+/// 参数模板：`"{freq}_D{di}ATR{timeperiod}_Z{lookback}_Z分位V250101"`
+///
+/// 信号逻辑：
+/// 1. 基于 `update_atr_cache` 计算指定周期的 ATR；
+/// 2. 取末尾 `lookback` 根 K 线，计算 `atr_i / close_i`；
+/// 3. 在样本上求 mean / std，得到末值的 z-score；
+/// 4. `z < -1` 输出 `低位`，`z > 1` 输出 `高位`，其余输出 `中位`；
+/// 5. 样本不足以 std 估算时退化为 `其他`。
+///
+/// 信号列表示例：
+/// - `Signal('30分钟_D1ATR14_Z60_Z分位V250101_高位_任意_任意_0')`
+/// - `Signal('30分钟_D1ATR14_Z60_Z分位V250101_中位_任意_任意_0')`
+///
+/// 参数说明：
+/// - `di`：信号计算截止在倒数第 `di` 根 K 线，默认 `1`；
+/// - `timeperiod`：ATR 周期，默认 `14`；
+/// - `lookback`：z-score 样本窗口，默认 `60`（小窗口便于单元测试预热）。
+/// 对齐说明：本函数仅作 proc-macro 注册机制示例，与线上信号无对应 Python 实现。
+#[signal(
+    category = "kline",
+    name = "my_atr_band_V250101",
+    template = "{freq}_D{di}ATR{timeperiod}_Z{lookback}_Z分位V250101",
+    opcode = "MyAtrBandV250101",
+    param_kind = "MyAtrBandV250101"
+)]
+pub fn my_atr_band_v250101(czsc: &CZSC, params: &ParamView, cache: &mut TaCache) -> Vec<Signal> {
+    // ── 1. 取参数 ──────────────────────────────────────────────
+    let di = get_usize_param(params, "di", 1);
+    let timeperiod = get_usize_param(params, "timeperiod", 14);
+    let lookback = get_usize_param(params, "lookback", 60);
+
+    // ── 2. 更新缓存（对齐 Python update_atr_cache） ────────────
+    let cache_key = format!("ATR{}", timeperiod);
+    update_atr_cache(czsc, &cache_key, timeperiod, cache);
+
+    let k1 = czsc.freq.to_string();
+    let k2 = format!("D{}ATR{}Z{}", di, timeperiod, lookback);
+    let k3 = "Z分位V250101";
+    let mut v1 = "其他".to_string();
+
+    // ── 3. 防御 + 数据裁剪 ────────────────────────────────────
+    if czsc.bars_raw.is_empty() || di == 0 || lookback < 5 {
+        return make_kline_signal_v1(&k1, &k2, k3, &v1);
+    }
+    let bars = get_sub_elements(&czsc.bars_raw, di, lookback);
+    if bars.is_empty() {
+        return make_kline_signal_v1(&k1, &k2, k3, &v1);
+    }
+
+    // ── 4. 计算 ratio = atr_i / close_i ────────────────────────
+    let atr = cache.series.get(&cache_key).unwrap();
+    let end = czsc.bars_raw.len() - di + 1;
+    let start = end - bars.len();
+    let ratio: Vec<f64> = bars
+        .iter()
+        .enumerate()
+        .map(|(i, b)| {
+            let v = atr[start + i] / b.close;
+            if v.is_finite() { v } else { f64::NAN }
+        })
+        .collect();
+
+    let valid: Vec<f64> = ratio.iter().copied().filter(|x| x.is_finite()).collect();
+    if valid.len() < 5 {
+        return make_kline_signal_v1(&k1, &k2, k3, &v1);
+    }
+    let mean = valid.iter().sum::<f64>() / valid.len() as f64;
+    let var = valid.iter().map(|x| (x - mean).powi(2)).sum::<f64>() / valid.len() as f64;
+    let std = var.sqrt();
+    if std < 1e-12 {
+        // 整段几乎贴均价 → 视为「中位」（不算边界）
+        v1 = "中位".to_string();
+        return make_kline_signal_v1(&k1, &k2, k3, &v1);
+    }
+
+    let last = ratio.last().copied().unwrap_or(f64::NAN);
+    if !last.is_finite() {
+        return make_kline_signal_v1(&k1, &k2, k3, &v1);
+    }
+    let z = (last - mean) / std;
+    v1 = match z {
+        z if z < -1.0 => "低位",
+        z if z > 1.0 => "高位",
+        _ => "中位",
+    }
+    .to_string();
+
+    make_kline_signal_v1(&k1, &k2, k3, &v1)
+}
+
 /// tas_macd_base_V230320：MACD/DIF/DEA 多空与方向信号（含重叠约束）
 ///
 /// 参数模板：`"{freq}_D{di}MACD{fastperiod}#{slowperiod}#{signalperiod}MO{max_overlap}#{key}_BS辅助V230320"`

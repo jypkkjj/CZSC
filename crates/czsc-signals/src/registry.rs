@@ -581,4 +581,18 @@ mod tests {
             assert_eq!(meta.param_template, d.template);
         }
     }
+
+    #[test]
+    fn test_macro_injected_my_atr_band_v250101_registered() {
+        // ratchet: 教程示例信号必须可在 K 线注册表中按名查到；
+        // 返回的 func_ref 必须是 Kline 变体，且 param_template 与宏注解完全一致。
+        let d = crate::tas::__RS_CZSC_SIGNAL_META_MY_ATR_BAND_V250101;
+        assert_eq!(d.name, "my_atr_band_V250101");
+        assert_eq!(d.template, "{freq}_D{di}ATR{timeperiod}_Z{lookback}_Z分位V250101");
+        let meta = super::SIGNAL_REGISTRY
+            .get(d.name)
+            .unwrap_or_else(|| panic!("missing macro injected signal: {}", d.name));
+        assert_eq!(meta.param_template, d.template);
+        assert!(matches!(d.func_ref, crate::types::SignalFnRef::Kline(_)));
+    }
 }
