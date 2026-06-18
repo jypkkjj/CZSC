@@ -73,6 +73,16 @@ def _patch_pool(_mock_session_unused: "_MockSession | None" = None) -> tuple[lis
         # F30 / F60 客户端重采样的用例需要 5min 数据足够，至少 6 根一组
         if "min1" in s or "min5" in s:
             return _make_min5_df(day="2025.01.02", code="SZ000001", bars_per_day=48)
+        # ddb //info / all_securities 表（get_symbols）：按 server 端 where 逻辑过滤
+        if "all_securities" in s:
+            df = _make_all_securities_df()
+            # 模拟服务端 where type = 'xxx' 过滤
+            import re
+            m = re.search(r"where\s+type\s*=\s*'(\w+)'", s)
+            if m:
+                t = m.group(1)
+                df = df[df["type"].astype(str) == t]
+            return df
         return pd.DataFrame()
 
     fake_pool = MagicMock()
@@ -139,6 +149,26 @@ def _make_min_df(rows: int, freq_label: str, day: str, ts_code: str) -> pd.DataF
     if freq_label == "5min":
         records = records[::5][:48]
     return pd.DataFrame(records)
+
+
+def _make_all_securities_df() -> pd.DataFrame:
+    """模拟 ``dfs://info / all_securities`` 表的 code / type 列。
+
+    notebook/ddb_data.ipynb cell-8 实测有 6 列：
+        display_name / name / start_date / end_date / type / code
+    本函数只保留 ``code / type``（只需 ``get_symbols`` 使用的部分）；
+    实测 type ∈ {"stock", "index"}。生产代码只看这两列。
+    """
+    rows = [
+        {"code": "000001.XSHE", "type": "stock"},
+        {"code": "600000.XSHG", "type": "stock"},
+        {"code": "510300.XSHG", "type": "stock"},
+        {"code": "159660.XSHE", "type": "stock"},
+        {"code": "000001.XSHG", "type": "index"},   # 上证指数
+        {"code": "000300.XSHG", "type": "index"},   # 沪深300
+        {"code": "000905.XSHG", "type": "index"},   # 中证500
+    ]
+    return pd.DataFrame(rows)
 
 
 @pytest.fixture
@@ -304,3 +334,73 @@ class TestDdbConnector:
         with pytest.raises(NotImplementedError) as exc:
             ddb.get_raw_bars("000001.XSHE", Freq.F10, "20250102", "20250102")
         assert "F10" in str(exc.value) or "ddb_connector" in str(exc.value)
+
+
+class TestGetSymbols:
+    """``get_symbols(step)`` 的端到端 + 分支覆盖。
+
+    数据源对齐 notebook/ddb_data.ipynb cell-8 的 SQL：
+        select * from loadTable("dfs://info", "all_securities")
+    ``_make_all_securities_df()`` 提供 4 stock + 3 index 共 7 行；这是 service 实测
+    真实有 7894 行大幅简化版。
+    """
+
+    def test_step_all_returns_full_code_list(self, patched_pool):
+        """step='all' 返回所有人 code 列 (stock + index 共 7 行)。"""
+        syms = ddb.get_symbols("all")
+        assert isinstance(syms, list)
+        assert len(syms) == 7
+        # 内容必须全部存在
+        assert "000001.XSHE" in syms
+        assert "000300.XSHG" in syms
+        # 调用过 SQL
+        calls, _ = patched_pool
+        assert any("all_securities" in c for c in calls)
+
+    def test_step_stock_filters_type(self, patched_pool):
+        """step='stock' 只返回 type='stock' 的代码。"""
+        syms = ddb.get_symbols("stock")
+        assert all(s != "000001.XSHG" for s in syms), "上证实证不应出现在 stock 集"
+        assert "000001.XSHE" in syms
+        assert "510300.XSHG" in syms
+        # 生成的 SQL 必须含 type='stock'
+        calls, _ = patched_pool
+        last = next(c for c in reversed(calls) if "all_securities" in c)
+        assert "where type = 'stock'" in last
+
+    def test_step_index_filters_type(self, patched_pool):
+        """step='index' 只返回 type='index' 的代码。"""
+        syms = ddb.get_symbols("index")
+        assert "000001.XSHE" not in syms, "平安银行不应出现在 index 集"
+        assert "000300.XSHG" in syms
+        assert len(syms) == 3
+
+    def test_default_step_is_all(self, patched_pool):
+        """不传参数时默认 step='all'。"""
+        syms_default = ddb.get_symbols()
+        syms_explicit = ddb.get_symbols("all")
+        assert syms_default == syms_explicit
+
+    def test_unknown_step_raises_valueerror(self, patched_pool):
+        """未知 step 抛 ValueError, 不连 ddb。"""
+        with pytest.raises(ValueError) as exc:
+            ddb.get_symbols("train")  # qa_connector 风格的 step, 本 connector 不支持
+        assert "train" in str(exc.value)
+
+    def test_ddb_failure_returns_empty_with_warning(self, patched_pool):
+        """ddb 不可达时 fail-soft: 返回 [] + logger.warning, 不 raise。"""
+        calls, fake_pool = patched_pool
+        # 模拟 ddb 不可达：get 返回一个 dummy session 使 _run_ddb 抛错
+        boom = MagicMock()
+        boom.run.side_effect = RuntimeError("connection refused")
+        boom.upload = MagicMock()
+        original_get = fake_pool.get
+        fake_pool.get.return_value = boom
+
+        try:
+            syms = ddb.get_symbols("all")
+        finally:
+            fake_pool.get = original_get
+
+        assert syms == []
+        assert boom.run.called

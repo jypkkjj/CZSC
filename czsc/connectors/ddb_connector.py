@@ -28,9 +28,9 @@ import os
 import threading
 from typing import List, Optional
 
-import pandas as pd
-
 import dolphindb as ddb
+import pandas as pd
+from loguru import logger
 
 import czsc
 from czsc import Freq, RawBar
@@ -294,8 +294,50 @@ def get_raw_bars(
 
 
 def get_symbols(step: str = "all") -> list[str]:
-    """列固定一组聚宽格式的 symbol。仅作 demo 用。
+    """从 DolphinDB ``dfs://info / all_securities`` 表取股票代码列表（聚宽格式）。
 
-    真实业务里应该从 ddb 里 loadTable("dfs://...", "stock_list") 取。
+    数据来源对齐 ``notebook/ddb_data.ipynb`` cell-8 的 SQL：
+
+    .. code-block:: sql
+
+        select * from loadTable("dfs://info", "all_securities")
+
+    返回列: ``code / type``，聚宽格式 symbol（``000001.XSHE`` 等）。
+    server 实测约 7894 行（含 stock + index + etf 等所有 type）。
+
+    :param step: 过滤规则，与 :func:`czsc.connectors.ts_connector.get_symbols` 对齐：
+
+        - ``"all"``（默认）—— 全部 type 的 ``code`` 列；
+        - ``"stock"`` —— 仅 stock；
+        - ``"index"`` —— 仅 index。
+
+        其它 step 抛 ``ValueError``。
+
+    :return: 聚宽格式 symbol 列表；失败（ddb 不可达 / SQL 报错）返回 ``[]``
+             + ``logger.warning``（fail-soft，绝不 raise）。
     """
-    return ["000001.XSHE", "600000.XSHG", "510300.XSHG", "159660.XSHE"]
+    if step not in {"all", "stock", "index"}:
+        raise ValueError(
+            f"ddb_connector.get_symbols: 未知的 step={step!r};"
+            " 合法值: 'all', 'stock', 'index'"
+        )
+
+    # type= 字面量直接嵌进 SQL，与 _fetch_raw_kline 内的 symbol/time_col 嵌入一致。
+    # 故意不用 _run_ddb 的 params=upload+replace 路径 —— 那条路径会把 list str() 化，
+    # ddb 端 round-trip 不可靠；这里 type 单值字符串走 SQL 字面量更稳。
+    type_filter = "" if step == "all" else f" where type = '{step}'"
+    sql = f'select code, type from loadTable("dfs://info", "all_securities"){type_filter}'
+
+    try:
+        df = _run_ddb(sql)
+    except Exception as exc:  # noqa: BLE001  网络/服务端 broad fail-soft
+        logger.warning(f"ddb_connector.get_symbols: ddb 不可达 ({exc}); step={step!r} 返回 []")
+        return []
+
+    if df is None or df.empty or "code" not in df.columns:
+        logger.warning(
+            f"ddb_connector.get_symbols: 未拿到含 code 列的 codelist；step={step!r} 返回 []"
+        )
+        return []
+
+    return df["code"].astype(str).tolist()

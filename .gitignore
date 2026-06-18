@@ -84,6 +84,8 @@ target/
 
 # Jupyter Notebook
 .ipynb_checkpoints
+# 本地 notebook/ 目录放探索性 .ipynb, 体积大+magic 字段杂, 不进 git
+notebook/
 
 # pyenv
 .python-version
