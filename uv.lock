@@ -566,6 +566,7 @@ all = [
     { name = "ipython", version = "8.37.0", source = { registry = "https://pypi.python.org/simple" }, marker = "python_full_version < '3.11'" },
     { name = "ipython", version = "9.5.0", source = { registry = "https://pypi.python.org/simple" }, marker = "python_full_version >= '3.11'" },
     { name = "jupyter" },
+    { name = "jupyterlab" },
     { name = "pytest" },
     { name = "pytest-cov" },
     { name = "talib-rs", marker = "(python_full_version == '3.12.*' and platform_machine == 'arm64' and sys_platform == 'darwin') or (python_full_version == '3.12.*' and sys_platform == 'win32')" },
@@ -575,6 +576,7 @@ dev = [
     { name = "ipython", version = "8.37.0", source = { registry = "https://pypi.python.org/simple" }, marker = "python_full_version < '3.11'" },
     { name = "ipython", version = "9.5.0", source = { registry = "https://pypi.python.org/simple" }, marker = "python_full_version >= '3.11'" },
     { name = "jupyter" },
+    { name = "jupyterlab" },
 ]
 release = [
     { name = "build" },
@@ -589,9 +591,11 @@ test = [
 [package.dev-dependencies]
 dev = [
     { name = "basedpyright" },
+    { name = "ipykernel" },
     { name = "ipython", version = "8.37.0", source = { registry = "https://pypi.python.org/simple" }, marker = "python_full_version < '3.11'" },
     { name = "ipython", version = "9.5.0", source = { registry = "https://pypi.python.org/simple" }, marker = "python_full_version >= '3.11'" },
     { name = "jupyter" },
+    { name = "jupyterlab" },
     { name = "maturin" },
     { name = "pytest" },
     { name = "pyyaml" },
@@ -607,6 +611,7 @@ requires-dist = [
     { name = "dolphindb", specifier = ">=1.0.1" },
     { name = "ipython", marker = "extra == 'dev'" },
     { name = "jupyter", marker = "extra == 'dev'" },
+    { name = "jupyterlab", marker = "extra == 'dev'" },
     { name = "loguru" },
     { name = "numpy" },
     { name = "openpyxl" },
@@ -632,8 +637,10 @@ provides-extras = ["all", "dev", "release", "test"]
 [package.metadata.requires-dev]
 dev = [
     { name = "basedpyright", specifier = ">=1.28.0" },
+    { name = "ipykernel", specifier = ">=6.30.0" },
     { name = "ipython", specifier = ">=8.37.0" },
     { name = "jupyter", specifier = ">=1.1.1" },
+    { name = "jupyterlab", specifier = ">=4.5.0" },
     { name = "maturin", specifier = ">=1.13.1" },
     { name = "pytest", specifier = ">=8.4.1" },
     { name = "pyyaml", specifier = ">=6.0.2" },

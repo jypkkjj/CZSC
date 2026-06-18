@@ -18,8 +18,8 @@
     - 调用方如果跨源对比，须自行对齐单位。
 
 ⚠️ freq 支持：
-    - 仅实测 F1 / F5 / F30 / F60 / D 服务端可达；Freq.F15/F10 等「服务端无该频」的
-      freq 直接 NotImplementedError（不过分猜测服务端行为）。
+    - 仅实测 F1 / F5 / D 服务端可达；F15 / F30 / F60 服务端没原生表；先拉 5min，由 czsc.resample_bars 客户端重采样。
+    - 其它 freq 报 NotImplementedError；后续升级服务端时再完善。
 """
 
 from __future__ import annotations

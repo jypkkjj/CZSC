@@ -96,6 +96,7 @@ test = [
 dev = [
     "ipython",
     "jupyter",
+    "jupyterlab",
 ]
 
 # 版本管理工具
@@ -116,7 +117,9 @@ Repository = "https://github.com/waditu/czsc"
 [dependency-groups]
 dev = [
     "ipython>=8.37.0",
+    "ipykernel>=6.30.0",
     "jupyter>=1.1.1",
+    "jupyterlab>=4.5.0",
     "pytest>=8.4.1",
     "pyyaml>=6.0.2",
     "tushare>=1.4.24",
