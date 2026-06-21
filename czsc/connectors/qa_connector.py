@@ -162,7 +162,7 @@ def _get_qa_data(
 def get_qa_code_list() -> pd.DataFrame:
     """拉 QA codelist 缓存为 DataFrame，columns=[code/name/market]。失败返回空 df。"""
     try:
-        res = _session.get(CODELIST_URL, timeout=QA_TIMEOUT)
+        res = _session.get(CODELIST_URL)
     except requests.RequestException:
         return pd.DataFrame()
     if res.status_code != 200:

@@ -227,6 +227,12 @@ uv run --no-sync pytest   # 不需要重新编译
 uv run --no-sync maturin develop --uv && uv run --no-sync pytest -x
 ```
 
+### 4.4 启动jupyterlab
+
+```bash
+uv run --no-sync jupyter lab --ip='*' --port=8818 --allow-root --NotebookApp.token=
+```
+
 > 黄金法则：**别直接跑 `cargo build`**——那条路径会绕开 maturin 的 feature 协商，触发 PyO3 `extension-module` 与具体 libpython 的链接冲突。
 
 ---
